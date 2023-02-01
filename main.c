@@ -7,9 +7,10 @@
 #include <sys/types.h>
 #include <unistd.h> // read(), write(), close()
 #include <signal.h> // For cleaning up after keyboard interrupt
+#include "server_utils.h"
 #define MAX 80
 #define PORT 8080
-#define REQ_LEN 8190
+
 
 int my_socket;
 int connection;
@@ -34,6 +35,9 @@ int main(int argc, char const *argv[])
     this_socket_addr.sin_addr.s_addr= INADDR_ANY;
     
     my_socket = socket(AF_INET, SOCK_STREAM, 0);
+    const int enable = 1;
+    if (setsockopt(my_socket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0)
+        printf("setsockopt(SO_REUSEADDR) failed");
     if (my_socket == -1)
     {
         printf("Socket Creation failed");
@@ -51,21 +55,20 @@ int main(int argc, char const *argv[])
     listen(my_socket, SOMAXCONN);
     int client_addr_len = sizeof(struct sockaddr_in);
     
-    char buf[REQ_LEN];
-
-
-
     while (1)
     {
         connection = accept(my_socket, (struct sockaddr_in *)&client_addr, (socklen_t*)&client_addr_len);
-
+        char request_str[REQ_LEN];
         if (connection != -1)
-        {
-            read(connection, buf, REQ_LEN);
-            buf[REQ_LEN-1]='\0';
-            char *resp="HTTP/1.1 200 OK\r\nServer: Demo\r\nContent-Length: 20\r\nContent-Type: text/html\r\n\r\n<h1>Hello World</h1>";
-            write(connection, resp, REQ_LEN);
-            printf("%s\n", buf);
+        {   
+            char *response_str = (char*)malloc(sizeof(char)*REQ_LEN);
+            request_str[0]='\0';
+            response_str[0]='\0';
+            read(connection, request_str, REQ_LEN);
+            enum http_codes ret = gen_response(request_str, response_str);
+            printf("%s", HTTP_CODES[ret]);
+            write(connection, response_str, REQ_LEN);
+            free(response_str);
         }
         close(connection);
 
