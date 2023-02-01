@@ -11,15 +11,17 @@
 #define PORT 8080
 #define REQ_LEN 8190
 
-int running = 1;
+int my_socket;
+int connection;
 
 void sigint_handler(int sig)
 {
-    running = 0;
-    //signal(SIGINT, sigint_handler);
+    signal(SIGINT, sigint_handler);
     printf("Stopping sockets.");
-    //fflush(stdout);
-
+    close(connection);
+    close(my_socket);
+    fflush(stdout);
+    exit(0);
 }
 
 int main(int argc, char const *argv[])
@@ -31,7 +33,7 @@ int main(int argc, char const *argv[])
     this_socket_addr.sin_port=htons(PORT);          // htons = host to network short unsigned 16 bit
     this_socket_addr.sin_addr.s_addr= INADDR_ANY;
     
-    int my_socket = socket(AF_INET, SOCK_STREAM, 0);
+    my_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (my_socket == -1)
     {
         printf("Socket Creation failed");
@@ -53,15 +55,15 @@ int main(int argc, char const *argv[])
 
 
 
-    while (running)
+    while (1)
     {
-        int connection = accept(my_socket, (struct sockaddr_in *)&client_addr, (socklen_t*)&client_addr_len);
+        connection = accept(my_socket, (struct sockaddr_in *)&client_addr, (socklen_t*)&client_addr_len);
 
         if (connection != -1)
         {
             read(connection, buf, REQ_LEN);
             buf[REQ_LEN-1]='\0';
-            char *resp="HTTP/1.1 200 OK\r\nServer: Demo\r\nContent-Length: 1024\r\nContent-Type: text/html\r\n\r\n<h1>Hello World</h1>";
+            char *resp="HTTP/1.1 200 OK\r\nServer: Demo\r\nContent-Length: 20\r\nContent-Type: text/html\r\n\r\n<h1>Hello World</h1>";
             write(connection, resp, REQ_LEN);
             printf("%s\n", buf);
         }
