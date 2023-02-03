@@ -2,7 +2,21 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include "server_utils.h"
+
+static char *HTTP_CODES[] = {
+    "HTTP/1.0 200 OK\r\n",
+    "HTTP/1.0 404 Not Found\r\nContent-Type: text/html\r\n\r\n<h1>404 Not Found</h1>\n",
+    "HTTP/1.0 301 Moved Permanently\r\nLocation: /index.html\r\n",
+    "HTTP/1.0 400 Bad Request\r\n"
+};
+
+static char *CONTENT_TYPE[] = {
+    "--Illegal--",
+    "Content-Type: text/html\r\n\r\n",
+    "Content-Type: \r\n\r\n"
+};
 
 file_type find_file_type(char *filename) 
 {
@@ -22,12 +36,17 @@ int find_file(char *file_name)
     char dir[100] = "./static";
     strcat(dir, file_name);
     if (access(dir, F_OK) == 0)
-        return 1;
+        return open(dir, O_RDONLY);
     else
-        return 0;
+        return -1;
 }
 
-enum http_codes gen_response(char *request_str, char *response_str)
+void response404(int connection)
+{
+    write(connection, HTTP_CODES[http_404], strlen(HTTP_CODES[http_404]));
+}
+
+void send_response(char *request_str, int connection)
 {
     //Kolla så metoden stämmer 
     int req_len = strlen(request_str);
@@ -41,8 +60,7 @@ enum http_codes gen_response(char *request_str, char *response_str)
         else
             strncat(method, &request_str[i], 1);
     }
-    method[i] = '\0';    // Ends the string instead of space
-    i++;    // To move on from the space
+    i++;
     for (; i < req_len; i++)
     {
         if (request_str[i]==' ')
@@ -50,55 +68,31 @@ enum http_codes gen_response(char *request_str, char *response_str)
         else
             strncat(file_n, &request_str[i], 1);
     }
-    
+
     if (strcmp(method, "GET") == 0)
     {
-        if (find_file(file_n))
-        {   
-            int type = find_file_type(file_n);
-            if (type == illegal_t)
-            {
-                strcat(response_str, HTTP_CODES[http_404]);
-                return http_404;
-            } else 
-            {
-                strcat(response_str, HTTP_CODES[http_200]);
-                strcat(response_str, "Server: Demo Web Server\r\n");
-
-                if (type == html_t)
-                    strcat(response_str, "Content-Type: text/html\r\n");
-                else
-                    strcat(response_str, "Content-Type: image/jpeg\r\n");
-
-                char dir[50] = "./static";
-                strcat(dir, file_n);
-                FILE * fp = fopen(dir, "r");
-                fseek(fp, 0L, SEEK_END);
-                unsigned long int size = ftell(fp);
-                
-                char s[30] = "\0";
-                sprintf(s, "Content-Size: %lu\r\n\r\n", size);
-                strcat(response_str, s);
-                
-                // Must realloc for big files. if size > REQ_LEN etc...
-                fseek(fp, 0, SEEK_SET);                                 // Resetting file pointer to beginning
-                char c;
-                while ((c=getc(fp))!=EOF)
-                {
-                    strncat(response_str, &c, 1);
-                }
-                
-                return http_200;
-            }           
-        } else 
+        int fd;
+        if ((fd = find_file(file_n))!=-1)
         {
-            strcat(response_str, HTTP_CODES[http_404]);
-            return http_404;
+            write(connection, HTTP_CODES[http_200], strlen(HTTP_CODES[http_200]));
+            file_type ext = find_file_type(file_n);
+            if (ext)
+            {
+                write(connection, CONTENT_TYPE[ext], strlen(CONTENT_TYPE[ext]));
+                char buf[BUFFER_SIZE];
+                int s;
+                while ((s=read(fd, &buf, BUFFER_SIZE)))
+                    write(connection, &buf, s);
+                return;
+            }
         }
+        
+        write(connection, HTTP_CODES[http_404], strlen(HTTP_CODES[http_404]));
+        return;
     } else 
     {
-        strcat(response_str, HTTP_CODES[http_404]);
-        return http_404;
+        write(connection, HTTP_CODES[http_400], strlen(HTTP_CODES[http_400]));
+        return;
     }
-    return http_404;
+
 }

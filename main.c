@@ -54,27 +54,20 @@ int main(int argc, char const *argv[])
 
     listen(my_socket, SOMAXCONN);
     int client_addr_len = sizeof(struct sockaddr_in);
-    
+    char *request_str = (char*)malloc(sizeof(char)*REQ_LEN);    
     while (1)
     {
         connection = accept(my_socket, (struct sockaddr_in *)&client_addr, (socklen_t*)&client_addr_len);
-        char request_str[REQ_LEN];
         if (connection != -1)
         {   
-            char *response_str = (char*)malloc(sizeof(char)*REQ_LEN);
             request_str[0]='\0';
-            response_str[0]='\0';
             read(connection, request_str, REQ_LEN);
-            enum http_codes ret = gen_response(request_str, response_str);
-            printf("%s", HTTP_CODES[ret]);
-            write(connection, response_str, REQ_LEN);
-            free(response_str);
+            send_response(request_str, connection);
+            
         }
         close(connection);
-
-
     }
-
+    free(request_str);
     close(my_socket);
     return 0;
 }
